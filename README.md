@@ -9,6 +9,24 @@
 >
 > 💝 **Proudly sponsored by [EasyPanel](https://easypanel.io?aff=7GNAmD)** - The ultimate hosting platform for developers. Support our open-source work by upgrading through our affiliate link.
 
+## ⚠️ License Notice
+
+This software is provided under the **MIT License**. You are free to:
+- ✅ Use the software for any purpose
+- ✅ Study and modify the source code
+- ✅ Distribute copies under the same MIT license
+- ✅ Create private forks and modifications
+
+**Restrictions:**
+- ❌ Remove copyright or license notices
+- ❌ Claim ownership of original work
+- ❌ Sue for damages if software fails
+- ❌ Use trademark or branding without permission
+
+**For commercial redistribution or custom licensing, please contact the author.**
+
+*All modifications must retain the original copyright and license.*
+
 Manage your entire EasyPanel infrastructure - projects, services, databases, domains, SSL certificates, and monitoring - through natural language commands in Claude.
 
 ---
