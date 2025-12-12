@@ -1,6 +1,6 @@
 # MCP EasyPanel Server
 
-[![npm version](https://badge.fury.io/js/mcp-easypanel-server.svg)](https://badge.fury.io/js/mcp-easypanel-server)
+[![npm version](https://badge.fury.io/js/easypanel-mcp.svg)](https://badge.fury.io/js/easypanel-mcp)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
@@ -95,7 +95,7 @@ This MCP EasyPanel Server is **100% immune** to the Critical React Server Compon
 
 ### Option 1: Install from npm (Recommended)
 ```bash
-npx mcp-easypanel-install
+npx easypanel-mcp-install
 ```
 
 ### Option 2: Clone and Build
@@ -107,7 +107,7 @@ npm install && npm run build
 
 ### Option 3: Install as Global Package
 ```bash
-npm install -g mcp-easypanel-server
+npm install -g easypanel-mcp
 ```
 
 ---
@@ -125,7 +125,7 @@ echo "EASYPANEL_EMAIL=your-email@example.com" >> ~/.mcp-easypanel.env
 echo "EASYPANEL_PASSWORD=your-password" >> ~/.mcp-easypanel.env
 
 # 2. Add to Claude Code (reads from .env)
-claude mcp add easypanel npx mcp-easypanel-server
+claude mcp add easypanel npx easypanel-mcp
 
 # 3. Test connection
 echo "List all projects to verify connection"
@@ -135,7 +135,7 @@ echo "List all projects to verify connection"
 
 ```bash
 # Add with explicit environment variables
-claude mcp add easypanel npx mcp-easypanel-server \
+claude mcp add easypanel npx easypanel-mcp \
   --env EASYPANEL_URL=http://your-server-ip:3000 \
   --env EASYPANEL_EMAIL=your-email@example.com \
   --env EASYPANEL_PASSWORD=your-password
@@ -169,7 +169,7 @@ Create/edit `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/
   "mcpServers": {
     "easypanel": {
       "command": "npx",
-      "args": ["mcp-easypanel-server"],
+      "args": ["easypanel-mcp"],
       "env": {
         "EASYPANEL_URL": "http://your-server-ip:3000",
         "EASYPANEL_EMAIL": "your-email@example.com",
@@ -186,7 +186,7 @@ Create/edit `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/
   "mcp.servers": {
     "easypanel": {
       "command": "npx",
-      "args": ["mcp-easypanel-server"]
+      "args": ["easypanel-mcp"]
     }
   }
 }
@@ -199,7 +199,7 @@ Create/edit `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/
     "servers": {
       "easypanel": {
         "command": "npx",
-        "args": ["mcp-easypanel-server"]
+        "args": ["easypanel-mcp"]
       }
     }
   }
@@ -210,7 +210,7 @@ Create/edit `~/.config/Claude/claude_desktop_config.json` (Linux) or `~/Library/
 
 ```bash
 # Test the connection
-npx mcp-easypanel-test
+npx easypanel-mcp-test
 
 # Or in Claude:
 "List all projects to verify the connection works"
@@ -230,7 +230,7 @@ npx mcp-easypanel-test
   "mcpServers": {
     "easypanel": {
       "command": "node",
-      "args": ["/absolute/path/to/mcp-easypanel-server/dist/index.js"],
+      "args": ["/absolute/path/to/easypanel-mcp/dist/index.js"],
       "env": {
         "EASYPANEL_URL": "http://your-server-ip:3000",
         "EASYPANEL_EMAIL": "admin@example.com",
@@ -250,7 +250,7 @@ Create `.claude/mcp.json` in your project:
   "mcpServers": {
     "easypanel": {
       "command": "npx",
-      "args": ["mcp-easypanel-server@latest"],
+      "args": ["easypanel-mcp@latest"],
       "env": {
         "EASYPANEL_URL": "http://your-server-ip:3000",
         "EASYPANEL_EMAIL": "admin@example.com",
@@ -270,7 +270,7 @@ Add to your `.vscode/settings.json`:
   "claude.mcp.servers": {
     "easypanel": {
       "command": "npx",
-      "args": ["mcp-easypanel-server"]
+      "args": ["easypanel-mcp"]
     }
   },
   "claude.env": {
@@ -462,7 +462,7 @@ Environment=EASYPANEL_URL=https://panel.example.com
 Environment=EASYPANEL_EMAIL=claude@example.com
 Environment=EASYPANEL_PASSWORD=\${EASYPANEL_PASSWORD}
 Environment=CACHE_TTL=600
-ExecStart=/usr/bin/node /opt/mcp-easypanel-server/dist/index.js
+ExecStart=/usr/bin/node /opt/easypanel-mcp/dist/index.js
 Restart=always
 
 [Install]
@@ -544,7 +544,7 @@ npm start
 ### Project Structure
 
 ```
-mcp-easypanel-server/
+easypanel-mcp/
 ├── src/
 │   ├── api/           # EasyPanel API client
 │   ├── tools/         # MCP tool implementations

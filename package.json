@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "mcp-easypanel": "./dist/index.js"
+    "easypanel-mcp": "./dist/index.js"
   },
   "files": [
     "dist",
