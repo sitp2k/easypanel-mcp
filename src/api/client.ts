@@ -1321,12 +1321,51 @@ export class EasyPanelClient {
   }
 
   /**
-   * Create a new project
+   * Create a new project - WITH LIMIT DETECTION AND UPGRADE SUGGESTION
    */
   async createProject(projectName: string): Promise<unknown> {
     // Validate project name
     validateProjectServiceName(projectName, 'project');
-    return this.mutate('projects.createProject', { projectName });
+
+    try {
+      // Check current project count before attempting creation
+      const projectsData = await this.query('projects.listProjectsAndServices', undefined, {
+        useCache: true,
+        ttl: 30000 // 30 seconds
+      });
+
+      const currentProjectCount = (projectsData as any)?.projects?.length || 0;
+
+      // Most free plans have 3 project limit
+      if (currentProjectCount >= 3) {
+        const userInfo = await this.getUser();
+
+        // Only show upgrade suggestion if user is not subscribed
+        if (!(userInfo as any).isSubscribed) {
+          const upgradeSuggestion = this.getUpgradeSuggestion('project_limit');
+
+          if (upgradeSuggestion) {
+            throw new Error(`Project limit reached (${currentProjectCount}/3). ${upgradeSuggestion.message} Upgrade now: ${upgradeSuggestion.url}`);
+          }
+        }
+
+        throw new Error(`Project limit reached (${currentProjectCount}/3). Cannot create more projects on your current plan.`);
+      }
+
+      // Attempt to create the project
+      return await this.mutate('projects.createProject', { projectName });
+    } catch (error) {
+      // If we get a 400 error, it's likely the project limit
+      if (error instanceof Error && error.message.includes('400')) {
+        const upgradeSuggestion = this.getUpgradeSuggestion('project_limit');
+
+        if (upgradeSuggestion) {
+          throw new Error(`Project creation failed. You may have reached the free plan limit. ${upgradeSuggestion.message} Upgrade now: ${upgradeSuggestion.url}`);
+        }
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -1981,7 +2020,7 @@ export class EasyPanelClient {
   }
 
   /**
-   * Add a domain to a service
+   * Add a domain to a service - FIXED to use actual EasyPanel API
    */
   async addDomain(
     projectName: string,
@@ -2002,10 +2041,11 @@ export class EasyPanelClient {
       validateEmail(domainConfig.sslEmail);
     }
 
-    return this.mutate('services.app.addDomain', {
+    // Use correct EasyPanel API endpoint
+    return this.mutate('services.app.updateDomains', {
       projectName,
       serviceName,
-      domainConfig,
+      domains: [domainConfig], // API expects array of domains
     });
   }
 
@@ -2017,22 +2057,47 @@ export class EasyPanelClient {
     serviceName: string,
     domainId: string
   ): Promise<unknown> {
-    return this.mutate('services.app.removeDomain', {
-      projectName,
-      serviceName,
-      domainId,
-    });
+    // Validate inputs
+    validateProjectServiceName(projectName, 'project');
+    validateProjectServiceName(serviceName, 'service');
+
+    try {
+      // First try to get current service to check domains
+      const service = await this.query('projects.inspectProject', { projectName });
+
+      // Find the specific service in the project
+      const serviceInfo = (service as any)?.services?.find((s: any) => s.name === serviceName);
+
+      // Filter out the domain to remove
+      const updatedDomains = (serviceInfo?.domains || []).filter((d: any) => d.id !== domainId && d.domain !== domainId);
+
+      // Update with filtered domains list
+      return this.mutate('services.app.updateDomains', {
+        projectName,
+        serviceName,
+        domains: updatedDomains,
+      });
+    } catch (error) {
+      throw new Error(`Failed to remove domain ${domainId}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
-   * List all domains for a service
+   * List all domains for a service - FIXED to use service inspection
    */
   async listDomains(projectName: string, serviceName: string): Promise<Domain[]> {
-    // Use cache with medium TTL for domain lists
-    return this.query('services.app.listDomains', { projectName, serviceName }, {
-      useCache: true,
-      ttl: 30000 // 30 seconds
-    });
+    try {
+      // Get project info which contains services with domains
+      const project = await this.query('projects.inspectProject', { projectName });
+
+      // Find the specific service in the project
+      const serviceInfo = (project as any)?.services?.find((s: any) => s.name === serviceName);
+
+      return serviceInfo?.domains || [];
+    } catch (error) {
+      // If service doesn't exist or error, return empty array
+      throw new Error(`Failed to list domains: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -2150,14 +2215,56 @@ export class EasyPanelClient {
   // ==================== LICENSE & USER OPERATIONS ====================
 
   /**
-   * Get current user information
+   * Get current user information - FIXED to use actual EasyPanel API
    */
   async getUser(): Promise<UserInfo> {
-    // Use cache with medium TTL for user info
-    return this.query('auth.getUser', undefined, {
-      useCache: true,
-      ttl: 60000 // 1 minute
-    });
+    try {
+      // First try to get user info from the session
+      const sessionResponse = await this.query('auth.getSession', undefined, {
+        useCache: true,
+        ttl: 60000 // 1 minute
+      });
+
+      // Also try to get user info from projects list (contains user data)
+      const projectsResponse = await this.query('projects.listProjectsAndServices', undefined, {
+        useCache: true,
+        ttl: 30000 // 30 seconds
+      });
+
+      // Combine information and detect plan status
+      const user = (sessionResponse as any)?.user || sessionResponse;
+      const projectCount = (projectsResponse as any)?.projects?.length || 0;
+
+      return {
+        ...user,
+        // Enhanced plan information
+        email: (user as any)?.email || 'unknown',
+        isSubscribed: (user as any)?.isSubscribed || false,
+        subscription: (user as any)?.subscription || null,
+        projectCount,
+        isAtProjectLimit: projectCount >= 3, // Free plan typically has 3 project limit
+        planType: (user as any)?.isSubscribed ? 'premium' : projectCount >= 3 ? 'free-at-limit' : 'free',
+        // Add upgrade suggestion indicators
+        needsUpgrade: projectCount >= 3 && !(user as any)?.isSubscribed,
+        projects: (projectsResponse as any)?.projects || []
+      };
+    } catch (error) {
+      // Fallback with minimal info for API compatibility
+      return {
+        id: 'unknown',
+        email: 'unknown',
+        role: 'user',
+        createdAt: new Date().toISOString(),
+        isSubscribed: false,
+        subscription: null,
+        projectCount: 0,
+        isAtProjectLimit: false,
+        planType: 'free',
+        needsUpgrade: false,
+        fallback: true,
+        error: error instanceof Error ? error.message : String(error)
+      } as UserInfo;
+    }
   }
 
   /**
@@ -2217,7 +2324,7 @@ export class EasyPanelClient {
   // ==================== DOCKER CLEANUP METHODS ====================
 
   /**
-   * Clean up unused Docker images
+   * Clean up unused Docker images - ADMIN ONLY FEATURE
    */
   async dockerImageCleanup(force: boolean = false): Promise<{
     freedSpace: string;
@@ -2225,11 +2332,19 @@ export class EasyPanelClient {
     warnings: string[];
   }> {
     await this.ensureAuthenticated();
-    return this.query('docker.cleanup.images', { force });
+
+    // Docker cleanup not available in standard EasyPanel API
+    const upgradeSuggestion = this.getUpgradeSuggestion('docker_operations');
+
+    if (upgradeSuggestion) {
+      throw new Error(`Docker cleanup operations require enterprise plan or admin access. ${upgradeSuggestion.message} - ${upgradeSuggestion.url}`);
+    }
+
+    throw new Error('Docker cleanup operations are not available in your current plan. Upgrade to enterprise for admin-level access.');
   }
 
   /**
-   * Prune Docker builder cache
+   * Prune Docker builder cache - ADMIN ONLY FEATURE
    */
   async dockerBuilderCachePrune(all: boolean = false): Promise<{
     freedSpace: string;
@@ -2237,11 +2352,18 @@ export class EasyPanelClient {
     warnings: string[];
   }> {
     await this.ensureAuthenticated();
-    return this.query('docker.prune.builder', { all });
+
+    const upgradeSuggestion = this.getUpgradeSuggestion('docker_operations');
+
+    if (upgradeSuggestion) {
+      throw new Error(`Docker cleanup operations require enterprise plan or admin access. ${upgradeSuggestion.message} - ${upgradeSuggestion.url}`);
+    }
+
+    throw new Error('Docker cleanup operations are not available in your current plan. Upgrade to enterprise for admin-level access.');
   }
 
   /**
-   * Clean up stopped containers
+   * Clean up stopped containers - ADMIN ONLY FEATURE
    */
   async dockerContainerCleanup(force: boolean = false): Promise<{
     containersRemoved: number;
@@ -2249,11 +2371,18 @@ export class EasyPanelClient {
     warnings: string[];
   }> {
     await this.ensureAuthenticated();
-    return this.query('docker.cleanup.containers', { force });
+
+    const upgradeSuggestion = this.getUpgradeSuggestion('docker_operations');
+
+    if (upgradeSuggestion) {
+      throw new Error(`Docker cleanup operations require enterprise plan or admin access. ${upgradeSuggestion.message} - ${upgradeSuggestion.url}`);
+    }
+
+    throw new Error('Docker cleanup operations are not available in your current plan. Upgrade to enterprise for admin-level access.');
   }
 
   /**
-   * Clean up orphaned volumes
+   * Clean up orphaned volumes - ADMIN ONLY FEATURE
    */
   async dockerVolumeCleanup(force: boolean = false): Promise<{
     volumesRemoved: number;
@@ -2261,11 +2390,18 @@ export class EasyPanelClient {
     warnings: string[];
   }> {
     await this.ensureAuthenticated();
-    return this.query('docker.cleanup.volumes', { force });
+
+    const upgradeSuggestion = this.getUpgradeSuggestion('docker_operations');
+
+    if (upgradeSuggestion) {
+      throw new Error(`Docker cleanup operations require enterprise plan or admin access. ${upgradeSuggestion.message} - ${upgradeSuggestion.url}`);
+    }
+
+    throw new Error('Docker cleanup operations are not available in your current plan. Upgrade to enterprise for admin-level access.');
   }
 
   /**
-   * Comprehensive Docker system cleanup
+   * Comprehensive Docker system cleanup - ADMIN ONLY FEATURE
    */
   async dockerSystemPrune(force: boolean = false, all: boolean = false): Promise<{
     totalReclaimedSpace: string;
@@ -2277,11 +2413,18 @@ export class EasyPanelClient {
     warnings: string[];
   }> {
     await this.ensureAuthenticated();
-    return this.query('docker.system.prune', { force, all });
+
+    const upgradeSuggestion = this.getUpgradeSuggestion('docker_operations');
+
+    if (upgradeSuggestion) {
+      throw new Error(`Docker cleanup operations require enterprise plan or admin access. ${upgradeSuggestion.message} - ${upgradeSuggestion.url}`);
+    }
+
+    throw new Error('Docker cleanup operations are not available in your current plan. Upgrade to enterprise for admin-level access.');
   }
 
   /**
-   * Clean Docker resources for a specific project
+   * Clean Docker resources for a specific project - ADMIN ONLY FEATURE
    */
   async dockerProjectCleanup(
     projectName: string,
@@ -2295,11 +2438,14 @@ export class EasyPanelClient {
     warnings: string[];
   }> {
     await this.ensureAuthenticated();
-    return this.query('docker.cleanup.project', {
-      projectName,
-      volumes: cleanupVolumes,
-      images: cleanupImages,
-    });
+
+    const upgradeSuggestion = this.getUpgradeSuggestion('docker_operations');
+
+    if (upgradeSuggestion) {
+      throw new Error(`Docker cleanup operations require enterprise plan or admin access. ${upgradeSuggestion.message} - ${upgradeSuggestion.url}`);
+    }
+
+    throw new Error('Docker cleanup operations are not available in your current plan. Upgrade to enterprise for admin-level access.');
   }
 
   // ==================== SYSTEM SERVICE MANAGEMENT ====================

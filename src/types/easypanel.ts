@@ -223,6 +223,15 @@ export interface UserInfo {
   lastLogin?: string;
   plan?: string;
   permissions?: string[];
+  isSubscribed?: boolean;
+  subscription?: any;
+  projectCount?: number;
+  isAtProjectLimit?: boolean;
+  planType?: string;
+  needsUpgrade?: boolean;
+  projects?: any[];
+  fallback?: boolean;
+  error?: string;
 }
 
 export interface LicensePayload {
