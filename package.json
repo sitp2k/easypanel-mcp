@@ -1,0 +1,52 @@
+{
+  "name": "easypanel-mcp",
+  "version": "1.0.0",
+  "description": "MCP Server for EasyPanel - manage projects, services, deployments, and more",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "mcp-easypanel": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "prepare": "npm run build",
+    "test": "node test-install.sh",
+    "install:setup": "./install.sh",
+    "install:local": "npm install && npm run build",
+    "install:global": "npm install -g .",
+    "postinstall": "echo '✅ MCP EasyPanel Server installed successfully! Run \"npm run test\" to verify.'",
+    "example:env": "cp .env.example .env && echo '✅ .env file created from example. Please update with your credentials.'"
+  },
+  "keywords": [
+    "mcp",
+    "easypanel",
+    "model-context-protocol",
+    "claude",
+    "hosting",
+    "deployment"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "axios": "^1.7.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "tsx": "^4.0.0",
+    "typescript": "^5.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
