@@ -1,6 +1,6 @@
 {
   "name": "easypanel-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP Server for EasyPanel - manage projects, services, deployments, and more",
   "type": "module",
   "main": "dist/index.js",
