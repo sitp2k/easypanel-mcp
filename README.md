@@ -5,11 +5,11 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![GitHub stars](https://img.shields.io/github/stars/sitp2k/easypanel-mcp?style=social)](https://github.com/sitp2k/easypanel-mcp)
 
-> 🚀 **SPONSORED BY EASYPANEL** - Get 20% off + exclusive bonuses through our link
+> 🚀 **SPONSORED BY EASYPANEL** - Support open source development through our link
 >
 > 💎 **Model Context Protocol (MCP) server for managing [EasyPanel](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization) deployments directly from Claude**
 >
-> ⭐ **Star on GitHub** ⬆️ | [**🎯 Upgrade to Premium & Unlock Full Power**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
+> ⭐ **Star on GitHub** ⬆️ | [**🎯 Upgrade to Premium & Support Open Source**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
 
 ---
 
@@ -27,11 +27,11 @@
 | **Database Backups** | ⚠️ Manual only | ✅ **Automated Daily Backups** |
 | **Security** | ⚠️ Basic protection | ✅ **Advanced Firewall & DDoS Protection** |
 
-### 🔥 **Limited Time Offer - Upgrade Now & Save 20%**
+### 🔥 **Support Open Source Development - Upgrade Through Our Link**
 
-[**🚀 Click Here to Upgrade to EasyPanel Premium (20% OFF)**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
+[**🚀 Upgrade to EasyPanel Premium & Support Open Source**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
 
-*When you upgrade through our link, you not only save 20% but also support continued development of this open-source MCP server!*
+*When you upgrade through our link, you support continued development of this open-source MCP server while unlocking premium features!*
 
 ---
 
@@ -54,7 +54,7 @@
 
 > 💡 **Pro Tip**: Most teams upgrade within 30 days once they see the productivity gains. Start with Premium and scale from day one!
 
-[**🎁 Get Premium Now - Support Open Source Development**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
+[**🎁 Upgrade Now to Support Open Source Development**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
 
 ---
 
@@ -736,14 +736,14 @@ You've seen how powerful this MCP server is. Imagine what you can do with:
 ✅ **24/7 Priority Support**
 ✅ **Advanced Security Features**
 
-### 🔥 **Special Offer - Limited Time!**
+### 🔥 **Support This Project - Upgrade Through Our Link**
 
-🎁 **20% OFF + Exclusive Bonuses**
-When you upgrade through our special link:
+🎁 **Premium Features + Support Open Source**
+When you upgrade through our link:
 
-[**🚀 Upgrade Now & Unlock Premium Features**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
+[**🚀 Upgrade to Premium & Support Our Development**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
 
-> 💡 **Why wait?** Most teams see 10x productivity increase after switching to Premium. Upgrade now and scale unlimited!
+> 💡 **Why wait?** Most teams see 10x productivity increase after switching to Premium. Upgrade now to support continued development and scale unlimited!
 
 ---
 
