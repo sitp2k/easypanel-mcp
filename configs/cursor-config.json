@@ -1,0 +1,21 @@
+{
+  "mcp": {
+    "servers": {
+      "easypanel": {
+        "command": "easypanel-mcp",
+        "args": ["--client", "cursor", "--transport", "stdio"],
+        "description": "EasyPanel server management - optimized for Cursor",
+        "settings": {
+          "compactResponses": true,
+          "statelessMode": true,
+          "fastExecution": true
+        },
+        "env": {
+          "EASYPANEL_API_URL": "http://your-easypanel-server:8080",
+          "EASYPANEL_API_TOKEN": "your-api-token-here",
+          "MCP_CLIENT": "cursor"
+        }
+      }
+    }
+  }
+}

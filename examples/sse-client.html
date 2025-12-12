@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCP EasyPanel SSE Client Example</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .status {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            padding: 8px 16px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+        button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+        }
+        pre {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #e9ecef;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .progress-fill {
+            height: 100%;
+            background: #28a745;
+            transition: width 0.3s ease;
+        }
+        .tool-output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        .timestamp {
+            color: #6c757d;
+            font-size: 12px;
+        }
+        input[type="text"], select {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MCP EasyPanel Server - SSE Transport Example</h1>
+
+    <div class="container">
+        <h2>
+            Connection Status
+            <span id="status" class="status disconnected">Disconnected</span>
+        </h2>
+
+        <div>
+            <label>Server URL: </label>
+            <input type="text" id="serverUrl" value="http://localhost:3001/mcp" size="40" />
+            <button id="connectBtn">Connect</button>
+            <button id="disconnectBtn" disabled>Disconnect</button>
+        </div>
+
+        <div class="progress-bar">
+            <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+        </div>
+        <div id="progressText">Ready</div>
+    </div>
+
+    <div class="container">
+        <h2>Available Tools</h2>
+        <select id="toolSelect">
+            <option value="">Select a tool...</option>
+            <option value="docker_cleanup_images">Docker Cleanup Images</option>
+            <option value="docker_prune_builder_cache">Docker Prune Builder Cache</option>
+            <option value="docker_cleanup_containers">Docker Cleanup Containers</option>
+            <option value="docker_volumes_cleanup">Docker Volumes Cleanup</option>
+            <option value="docker_system_prune">Docker System Prune</option>
+        </select>
+
+        <div id="toolParams" style="margin-top: 10px;">
+            <!-- Tool-specific parameters will be inserted here -->
+        </div>
+
+        <button id="executeBtn" disabled>Execute Tool</button>
+    </div>
+
+    <div class="container">
+        <h2>Progress Stream</h2>
+        <button id="listenProgressBtn" disabled>Listen to Progress</button>
+        <div id="sessionId" style="margin-top: 10px;">
+            <label>Session ID: </label>
+            <input type="text" id="sessionIdInput" readonly />
+        </div>
+        <pre id="progressLog" style="height: 300px; overflow-y: scroll;"></pre>
+    </div>
+
+    <div class="container">
+        <h2>Tool Execution Results</h2>
+        <div id="toolResults"></div>
+    </div>
+
+    <script>
+        let sessionId = null;
+        let eventSource = null;
+        let isConnecting = false;
+        let isConnected = false;
+
+        const serverUrlInput = document.getElementById('serverUrl');
+        const connectBtn = document.getElementById('connectBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const statusEl = document.getElementById('status');
+        const progressFill = document.getElementById('progressFill');
+        const progressText = document.getElementById('progressText');
+        const progressLog = document.getElementById('progressLog');
+        const toolSelect = document.getElementById('toolSelect');
+        const toolParams = document.getElementById('toolParams');
+        const executeBtn = document.getElementById('executeBtn');
+        const listenProgressBtn = document.getElementById('listenProgressBtn');
+        const sessionIdInput = document.getElementById('sessionIdInput');
+        const toolResults = document.getElementById('toolResults');
+
+        // Generate session ID
+        function generateSessionId() {
+            return 'session_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        // Update UI state
+        function updateState(connected) {
+            isConnected = connected;
+            statusEl.textContent = connected ? 'Connected' : 'Disconnected';
+            statusEl.className = 'status ' + (connected ? 'connected' : 'disconnected');
+            connectBtn.disabled = connected || isConnecting;
+            disconnectBtn.disabled = !connected;
+            executeBtn.disabled = !connected;
+            listenProgressBtn.disabled = !connected;
+        }
+
+        // Log to progress console
+        function log(message, isError = false) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span class="timestamp">[${timestamp}]</span> ${message}`;
+            logEntry.style.color = isError ? '#dc3545' : '#333';
+            progressLog.appendChild(logEntry);
+            progressLog.scrollTop = progressLog.scrollHeight;
+        }
+
+        // Connect to MCP server
+        async function connect() {
+            isConnecting = true;
+            updateState(false);
+
+            try {
+                sessionId = generateSessionId();
+                sessionIdInput.value = sessionId;
+
+                log(`Connecting to ${serverUrlInput.value}...`);
+
+                // Initialize MCP session
+                const initResponse = await fetch(serverUrlInput.value, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-MCP-Session-ID': sessionId
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: 1,
+                        method: 'initialize',
+                        params: {
+                            protocolVersion: '2024-11-05',
+                            capabilities: {
+                                roots: { listChanged: true },
+                                sampling: {}
+                            },
+                            clientInfo: {
+                                name: 'sse-client-example',
+                                version: '1.0.0'
+                            }
+                        }
+                    })
+                });
+
+                if (!initResponse.ok) {
+                    throw new Error(`HTTP ${initResponse.status}: ${initResponse.statusText}`);
+                }
+
+                const initResult = await initResponse.json();
+                if (initResult.error) {
+                    throw new Error(initResult.error.message);
+                }
+
+                log('✓ MCP session initialized');
+                updateState(true);
+
+            } catch (error) {
+                log(`✗ Connection failed: ${error.message}`, true);
+                updateState(false);
+            } finally {
+                isConnecting = false;
+            }
+        }
+
+        // Disconnect from MCP server
+        function disconnect() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+            sessionId = null;
+            sessionIdInput.value = '';
+            progressFill.style.width = '0%';
+            progressText.textContent = 'Disconnected';
+            updateState(false);
+            log('Disconnected from server');
+        }
+
+        // Listen to progress updates
+        function listenToProgress() {
+            if (!sessionId) return;
+
+            log(`Listening to progress for session: ${sessionId}`);
+
+            eventSource = new EventSource(`${new URL(serverUrlInput.value).origin}/progress/${sessionId}`);
+
+            eventSource.onopen = () => {
+                log('✓ Progress stream connected');
+            };
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+
+                if (data.type === 'connected') {
+                    log('✓ Progress monitoring active');
+                } else if (data.type === 'progress') {
+                    const progress = data.progress;
+                    log(`${progress.toolName}: ${progress.progress}% - ${progress.message}`);
+
+                    if (progress.progress >= 0 && progress.progress <= 100) {
+                        progressFill.style.width = progress.progress + '%';
+                        progressText.textContent = `${progress.toolName} - ${progress.message}`;
+                    }
+
+                    if (progress.progress === 100) {
+                        log(`✓ ${progress.toolName} completed successfully`);
+
+                        // Show results if available
+                        if (progress.data) {
+                            const resultDiv = document.createElement('div');
+                            resultDiv.className = 'tool-output';
+                            resultDiv.innerHTML = `
+                                <h3>Results for ${progress.toolName}</h3>
+                                <pre>${JSON.stringify(progress.data, null, 2)}</pre>
+                            `;
+                            toolResults.appendChild(resultDiv);
+                        }
+                    } else if (progress.progress === -1) {
+                        log(`✗ ${progress.toolName} failed: ${progress.message}`, true);
+                    }
+                }
+            };
+
+            eventSource.onerror = () => {
+                log('✗ Progress stream error', true);
+                eventSource.close();
+                eventSource = null;
+            };
+        }
+
+        // Execute tool
+        async function executeTool() {
+            const tool = toolSelect.value;
+            if (!tool) return;
+
+            // Collect parameters
+            const params = {};
+            const inputs = toolParams.querySelectorAll('input, select');
+            for (const input of inputs) {
+                if (input.type === 'checkbox') {
+                    params[input.name] = input.checked;
+                } else if (input.value) {
+                    params[input.name] = input.value;
+                }
+            }
+
+            log(`Executing tool: ${tool}`);
+
+            try {
+                const response = await fetch(serverUrlInput.value, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-MCP-Session-ID': sessionId
+                    },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        id: Date.now(),
+                        method: 'tools/call',
+                        params: {
+                            name: tool,
+                            arguments: params
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.error) {
+                    throw new Error(result.error.message);
+                }
+
+                if (result.result && result.result.content) {
+                    log(`Tool response received`);
+
+                    // Display full results
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = 'tool-output';
+                    resultDiv.innerHTML = `
+                        <h3>Response for ${tool}</h3>
+                        <pre>${JSON.stringify(result.result.content[0].text, null, 2)}</pre>
+                    `;
+                    toolResults.appendChild(resultDiv);
+                }
+
+            } catch (error) {
+                log(`✗ Tool execution failed: ${error.message}`, true);
+            }
+        }
+
+        // Show tool parameters
+        function showToolParams() {
+            const tool = toolSelect.value;
+            toolParams.innerHTML = '';
+
+            if (tool === 'docker_cleanup_images' || tool === 'docker_cleanup_containers') {
+                toolParams.innerHTML = `
+                    <label>
+                        <input type="checkbox" name="force" />
+                        Force removal
+                    </label>
+                `;
+            } else if (tool === 'docker_prune_builder_cache') {
+                toolParams.innerHTML = `
+                    <label>
+                        <input type="checkbox" name="all" />
+                        Remove all cache
+                    </label>
+                `;
+            } else if (tool === 'docker_system_prune') {
+                toolParams.innerHTML = `
+                    <label>
+                        <input type="checkbox" name="force" />
+                        Force removal
+                    </label>
+                    <label>
+                        <input type="checkbox" name="all" />
+                        Remove all unused resources
+                    </label>
+                `;
+            }
+        }
+
+        // Event listeners
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        listenProgressBtn.addEventListener('click', listenToProgress);
+        executeBtn.addEventListener('click', executeTool);
+        toolSelect.addEventListener('change', showToolParams);
+
+        // Initialize
+        updateState(false);
+    </script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "easypanel": {
+      "command": "easypanel-mcp",
+      "args": ["--transport", "stdio"],
+      "description": "Manage EasyPanel projects, services, deployments, and databases",
+      "env": {
+        "EASYPANEL_API_URL": "http://your-easypanel-server:8080",
+        "EASYPANEL_API_TOKEN": "your-api-token-here"
+      }
+    }
+  }
+}

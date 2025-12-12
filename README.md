@@ -4,12 +4,25 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
 [![GitHub stars](https://img.shields.io/github/stars/sitp2k/easypanel-mcp?style=social)](https://github.com/sitp2k/easypanel-mcp)
+[![Multi-Client Support](https://img.shields.io/badge/🤖%20Multi-Client-Claude%20%7C%20Cursor%20%7C%20Windsurf%20%7C%20Kiro%20%7C%20Web%20IDEs-green)](https://github.com/sitp2k/easypanel-mcp)
 
 > 🚀 **SPONSORED BY EASYPANEL** - Support open source development through our link
 >
-> 💎 **Model Context Protocol (MCP) server for managing [EasyPanel](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization) deployments directly from Claude**
+> 💎 **Multi-client MCP server for managing [EasyPanel](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization) deployments from Claude, Cursor, Windsurf, Kiro, and Web IDEs**
 >
 > ⭐ **Star on GitHub** ⬆️ | [**🎯 Upgrade to Premium & Support Open Source**](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization)
+
+## 🤖 Universal AI IDE Support
+
+MCP EasyPanel Server now supports **all major AI development tools**:
+- ✅ **Claude** - Full MCP support with streaming
+- ✅ **Cursor** - Optimized for developer workflows
+- ✅ **Windsurf** - Enhanced error handling
+- ✅ **Kiro** - REST API with synchronous execution
+- ✅ **Web IDEs** - CORS-enabled REST API
+- ✅ **Generic MCP** - Universal compatibility
+
+[**📖 View Client Setup Guide**](docs/CLIENT_SETUP.md) | [**🚀 Quick Start**](docs/QUICK_START.md)
 
 ---
 
@@ -78,6 +91,44 @@ npm install -g easypanel-mcp
 ```
 
 > ⚠️ **Note**: This MCP server works with both Free and Premium [EasyPanel](https://easypanel.io?aff=7GNAmD&utm_source=github&utm_medium=readme&utm_campaign=readme-optimization). Upgrade to Premium to unlock advanced features!
+
+## 🔧 Quick Setup for Your AI Client
+
+### For Claude Desktop
+```bash
+# The server auto-detects Claude when used with MCP
+easypanel-mcp --transport stdio
+```
+
+### For Cursor
+```bash
+# Optimized for Cursor with compact responses
+easypanel-mcp --client cursor --transport stdio
+```
+
+### For Windsurf
+```bash
+# Enhanced error handling for Windsurf
+easypanel-mcp --client windsurf --transport sse --port 3001
+```
+
+### For Kiro
+```bash
+# REST API for Kiro (synchronous mode)
+easypanel-mcp --client kiro --transport rest --rest-port 3002
+```
+
+### For Web IDEs
+```bash
+# CORS-enabled REST API for web integration
+easypanel-mcp --transport rest --rest-port 3002
+```
+
+### For All Clients (Development)
+```bash
+# Run all transports simultaneously
+easypanel-mcp --transport all --http-port 3001 --rest-api-port 3002
+```
 
 ---
 
@@ -182,6 +233,46 @@ npx easypanel-mcp-test
 # Or in Claude:
 "List all projects to verify the connection works"
 ```
+
+---
+
+## 🌐 SSE Transport - Real-time Updates
+
+The MCP EasyPanel Server now supports **Server-Sent Events (SSE) transport** for real-time progress monitoring and web-based dashboard integration!
+
+### 🚀 Quick Start with SSE
+
+```bash
+# Start server with SSE transport (default port 3001)
+easypanel-mcp --transport sse
+
+# Custom port
+easypanel-mcp --transport sse --port 8080
+```
+
+### 📊 Available Endpoints
+
+- `POST /mcp` - Main MCP endpoint for tool execution
+- `GET /progress/{sessionId}` - Real-time progress stream via SSE
+- `GET /health` - Server health check
+- `GET /connections` - Active connections monitor
+
+### 🔄 Real-time Progress Support
+
+Long-running operations now stream live progress:
+- **Docker Cleanup**: Image cleanup, container removal, volume pruning
+- **System Operations**: Full system prune, project-specific cleanup
+- **Status Updates**: Progress percentage, status messages, completion events
+
+### 🌐 Web Dashboard
+
+An example HTML client is included at `examples/sse-client.html`:
+1. Start server: `easypanel-mcp --transport sse`
+2. Open `examples/sse-client.html` in your browser
+3. Execute Docker operations with live progress tracking
+
+### 📖 Full Documentation
+See [docs/SSE_TRANSPORT.md](docs/SSE_TRANSPORT.md) for complete SSE transport documentation.
 
 ---
 

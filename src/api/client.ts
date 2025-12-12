@@ -4,6 +4,10 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { promisify } from 'util';
+import { exec } from 'child_process';
+import dns from 'dns';
+import os from 'os';
 import {
   AuthResponse,
   TRPCRequest,
@@ -43,6 +47,8 @@ import {
   validateGitRef,
 } from '../utils/validation.js';
 import { ValidationError } from '../utils/errors.js';
+
+const execAsync = promisify(exec);
 
 // Global type declarations for browser environment
 interface GlobalStorage {
@@ -2206,6 +2212,1408 @@ export class EasyPanelClient {
     this.clearCache('auth.getUser');
 
     return this.mutate('license.activate', request);
+  }
+
+  // ==================== DOCKER CLEANUP METHODS ====================
+
+  /**
+   * Clean up unused Docker images
+   */
+  async dockerImageCleanup(force: boolean = false): Promise<{
+    freedSpace: string;
+    imagesRemoved: number;
+    warnings: string[];
+  }> {
+    await this.ensureAuthenticated();
+    return this.query('docker.cleanup.images', { force });
+  }
+
+  /**
+   * Prune Docker builder cache
+   */
+  async dockerBuilderCachePrune(all: boolean = false): Promise<{
+    freedSpace: string;
+    cacheId: string;
+    warnings: string[];
+  }> {
+    await this.ensureAuthenticated();
+    return this.query('docker.prune.builder', { all });
+  }
+
+  /**
+   * Clean up stopped containers
+   */
+  async dockerContainerCleanup(force: boolean = false): Promise<{
+    containersRemoved: number;
+    freedSpace: string;
+    warnings: string[];
+  }> {
+    await this.ensureAuthenticated();
+    return this.query('docker.cleanup.containers', { force });
+  }
+
+  /**
+   * Clean up orphaned volumes
+   */
+  async dockerVolumeCleanup(force: boolean = false): Promise<{
+    volumesRemoved: number;
+    freedSpace: string;
+    warnings: string[];
+  }> {
+    await this.ensureAuthenticated();
+    return this.query('docker.cleanup.volumes', { force });
+  }
+
+  /**
+   * Comprehensive Docker system cleanup
+   */
+  async dockerSystemPrune(force: boolean = false, all: boolean = false): Promise<{
+    totalReclaimedSpace: string;
+    containersRemoved: number;
+    imagesRemoved: number;
+    volumesRemoved: number;
+    networksRemoved: number;
+    buildCacheReclaimed: string;
+    warnings: string[];
+  }> {
+    await this.ensureAuthenticated();
+    return this.query('docker.system.prune', { force, all });
+  }
+
+  /**
+   * Clean Docker resources for a specific project
+   */
+  async dockerProjectCleanup(
+    projectName: string,
+    cleanupVolumes: boolean = false,
+    cleanupImages: boolean = false
+  ): Promise<{
+    containersRemoved: number;
+    volumesRemoved: number;
+    imagesRemoved: number;
+    freedSpace: string;
+    warnings: string[];
+  }> {
+    await this.ensureAuthenticated();
+    return this.query('docker.cleanup.project', {
+      projectName,
+      volumes: cleanupVolumes,
+      images: cleanupImages,
+    });
+  }
+
+  // ==================== SYSTEM SERVICE MANAGEMENT ====================
+
+  /**
+   * Restart EasyPanel daemon service
+   */
+  async restartEasyPanelService(): Promise<{
+    success: boolean;
+    message: string;
+    duration: number;
+    previousState: string;
+    newState: string;
+  }> {
+    await this.ensureAuthenticated();
+
+    const startTime = Date.now();
+
+    try {
+      // Get previous state before restart
+      const statusBefore = await this.getServiceHealthStatus('easypanel');
+
+      // Restart the service
+      const result = await this.mutate('system.restartService', {
+        serviceName: 'easypanel',
+        force: true,
+      });
+
+      // Get new state after restart
+      const statusAfter = await this.getServiceHealthStatus('easypanel');
+      const duration = Date.now() - startTime;
+
+      return {
+        success: true,
+        message: 'EasyPanel service restarted successfully',
+        duration,
+        previousState: statusBefore.status,
+        newState: statusAfter.status,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      throw new EasyPanelError({
+        message: `Failed to restart EasyPanel service after ${duration}ms`,
+        category: ErrorCategory.EASYPANEL_API,
+        operation: 'restartEasyPanelService',
+        originalError: error as Error,
+        suggestions: [
+          'Check if EasyPanel has sufficient permissions to manage system services',
+          'Verify the service exists and is properly configured',
+          'Check system logs for more details',
+          'Try restarting manually if the issue persists',
+        ],
+        retryable: true,
+      });
+    }
+  }
+
+  /**
+   * Restart Traefik proxy service
+   */
+  async restartTraefikService(): Promise<{
+    success: boolean;
+    message: string;
+    duration: number;
+    previousState: string;
+    newState: string;
+  }> {
+    await this.ensureAuthenticated();
+
+    const startTime = Date.now();
+
+    try {
+      // Get previous state before restart
+      const statusBefore = await this.getServiceHealthStatus('traefik');
+
+      // Restart the service
+      const result = await this.mutate('system.restartService', {
+        serviceName: 'traefik',
+        force: true,
+      });
+
+      // Get new state after restart
+      const statusAfter = await this.getServiceHealthStatus('traefik');
+      const duration = Date.now() - startTime;
+
+      return {
+        success: true,
+        message: 'Traefik service restarted successfully',
+        duration,
+        previousState: statusBefore.status,
+        newState: statusAfter.status,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      throw new EasyPanelError({
+        message: `Failed to restart Traefik service after ${duration}ms`,
+        category: ErrorCategory.EASYPANEL_API,
+        operation: 'restartTraefikService',
+        originalError: error as Error,
+        suggestions: [
+          'Check if Traefik has sufficient permissions to manage system services',
+          'Verify the service exists and is properly configured',
+          'Check if there are any configuration errors in Traefik',
+          'Verify Docker is running and accessible',
+        ],
+        retryable: true,
+      });
+    }
+  }
+
+  /**
+   * Get service health status
+   */
+  async getServiceStatus(serviceName: string): Promise<{
+    status: 'running' | 'stopped' | 'error' | 'unknown';
+    uptime?: number;
+    memory?: {
+      usage: number;
+      percent: number;
+    };
+    cpu?: {
+      percent: number;
+    };
+    lastRestart?: string;
+    health: 'healthy' | 'unhealthy' | 'unknown';
+  }> {
+    await this.ensureAuthenticated();
+
+    try {
+      // Try the dedicated system service status endpoint first
+      const result = await this.query('system.getServiceStatus', { serviceName });
+      return result as {
+        status: 'running' | 'stopped' | 'error' | 'unknown';
+        uptime?: number;
+        memory?: {
+          usage: number;
+          percent: number;
+        };
+        cpu?: {
+          percent: number;
+        };
+        lastRestart?: string;
+        health: 'healthy' | 'unhealthy' | 'unknown';
+      };
+    } catch (error) {
+      // Fallback to Docker container status if it's a containerized service
+      try {
+        const containerName = this.mapServiceToContainer(serviceName);
+        if (containerName) {
+          const dockerStats = await this.query('monitor.getServiceStats', {
+            projectName: 'system',
+            serviceName: containerName,
+          }) as any;
+
+          return {
+            status: dockerStats.enabled ? 'running' : 'stopped',
+            memory: dockerStats.memory,
+            cpu: dockerStats.cpu,
+            health: dockerStats.enabled ? 'healthy' : 'unhealthy',
+          };
+        }
+      } catch (dockerError) {
+        // If both fail, return unknown status
+      }
+
+      // Last resort: try system monitoring endpoint
+      try {
+        const systemStats = await this.getSystemStats();
+        // Extract service info from system stats if available
+        return {
+          status: 'unknown',
+          health: 'unknown',
+        };
+      } catch (systemError) {
+        throw new EasyPanelError({
+          message: `Unable to get status for service: ${serviceName}`,
+          category: ErrorCategory.EASYPANEL_API,
+          operation: 'getServiceStatus',
+          originalError: error as Error,
+          suggestions: [
+            'Verify the service name is correct (easypanel, traefik, docker, nginx)',
+            'Check if the service is installed and running',
+            'Try using system commands to check service status manually',
+          ],
+        });
+      }
+    }
+  }
+
+  /**
+   * Get system service logs
+   */
+  async getSystemServiceLogs(
+    serviceName: string,
+    options?: {
+      lines?: number;
+      follow?: boolean;
+      since?: string;
+      until?: string;
+    }
+  ): Promise<string[]> {
+    await this.ensureAuthenticated();
+
+    try {
+      // Try the dedicated system logs endpoint first
+      const result = await this.query('system.getServiceLogs', {
+        serviceName,
+        lines: options?.lines || 100,
+        follow: options?.follow || false,
+        since: options?.since,
+        until: options?.until,
+      });
+
+      return (result as any).logs || [];
+    } catch (error) {
+      // Fallback to Docker container logs if it's a containerized service
+      try {
+        const containerName = this.mapServiceToContainer(serviceName);
+        if (containerName) {
+          const logOptions = {
+            lines: options?.lines || 100,
+            timestamps: true,
+            ...options,
+          };
+
+          const containerLogs = await this.getServiceLogs('system', containerName, logOptions);
+          return containerLogs.logs.map(log =>
+            `${log.timestamp} [${log.level.toUpperCase()}] ${log.message}`
+          );
+        }
+      } catch (dockerError) {
+        // If Docker approach fails too
+      }
+
+      throw new EasyPanelError({
+        message: `Unable to fetch logs for service: ${serviceName}`,
+        category: ErrorCategory.EASYPANEL_API,
+        operation: 'getSystemServiceLogs',
+        originalError: error as Error,
+        suggestions: [
+          'Verify the service name is correct',
+          'Check if you have sufficient permissions to access service logs',
+          'Try using journalctl or docker logs commands directly',
+        ],
+      });
+    }
+  }
+
+  /**
+   * Helper method to map service names to container names
+   */
+  private mapServiceToContainer(serviceName: string): string | null {
+    const serviceToContainerMap: Record<string, string> = {
+      'easypanel': 'easypanel',
+      'traefik': 'traefik',
+      'nginx': 'nginx-proxy',
+    };
+
+    return serviceToContainerMap[serviceName] || null;
+  }
+
+  /**
+   * Helper method to get service health status (used internally)
+   */
+  private async getServiceHealthStatus(serviceName: string): Promise<{
+    status: string;
+    health: 'healthy' | 'unhealthy' | 'unknown';
+  }> {
+    try {
+      const status = await this.getServiceStatus(serviceName);
+      return {
+        status: status.status,
+        health: status.health,
+      };
+    } catch (error) {
+      return {
+        status: 'unknown',
+        health: 'unknown',
+      };
+    }
+  }
+
+  // ==================== SYSTEM DETECTION & MONITORING ====================
+
+  /**
+   * Get server IP address(es)
+   */
+  async getServerIPAddress(
+    includePrivate: boolean = true,
+    includeIPv6: boolean = false,
+    publicOnly: boolean = false
+  ): Promise<Array<{
+    address: string;
+    family: 'IPv4' | 'IPv6';
+    type: 'public' | 'private';
+    interface?: string;
+    isPrimary: boolean;
+  }>> {
+    await this.ensureAuthenticated();
+
+    try {
+      // Try EasyPanel's system info endpoint first
+      const systemInfo = await this.query('system.getServerIPs', {
+        includePrivate,
+        includeIPv6,
+        publicOnly,
+      }).catch(() => null) as any;
+
+      if (systemInfo?.addresses) {
+        return systemInfo.addresses;
+      }
+
+      // Fallback to manual detection
+      const interfaces = os.networkInterfaces();
+      const addresses: Array<{
+        address: string;
+        family: 'IPv4' | 'IPv6';
+        type: 'public' | 'private';
+        interface?: string;
+        isPrimary: boolean;
+      }> = [];
+
+      let publicIP: string | null = null;
+      let primaryInterface: string | null = null;
+
+      // Get public IP via external service
+      try {
+        const publicIPResponse = await fetch('https://api.ipify.org?format=json', {
+          signal: AbortSignal.timeout(5000),
+        });
+        const publicData = await publicIPResponse.json() as { ip: string };
+        publicIP = publicData?.ip;
+      } catch (error) {
+        console.error('[EasyPanel] Failed to fetch public IP:', error);
+      }
+
+      // Process network interfaces
+      for (const [ifaceName, ifaceInfo] of Object.entries(interfaces)) {
+        if (!ifaceInfo) continue;
+
+        for (const info of ifaceInfo) {
+          if (info.family === 'IPv6' && !includeIPv6) continue;
+          if (info.internal) continue;
+
+          const isPrivate = this.isPrivateIP(info.address);
+          if (publicOnly && isPrivate) continue;
+          if (!includePrivate && isPrivate) continue;
+
+          addresses.push({
+            address: info.address,
+            family: info.family as 'IPv4' | 'IPv6',
+            type: isPrivate ? 'private' : 'public',
+            interface: ifaceName,
+            isPrimary: false,
+          });
+
+          // Mark primary interface and primary IP
+          if (!primaryInterface && !isPrivate) {
+            primaryInterface = ifaceName;
+          }
+        }
+      }
+
+      // Mark primary IP
+      addresses.forEach(addr => {
+        if (addr.address === publicIP || (addr.interface === primaryInterface && addr.type === 'public')) {
+          addr.isPrimary = true;
+        }
+      });
+
+      // Sort addresses: public first, then primary, then by interface
+      addresses.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'public' ? -1 : 1;
+        if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
+        return (a.interface || '').localeCompare(b.interface || '');
+      });
+
+      return addresses;
+    } catch (error) {
+      throw new EasyPanelError({
+        message: 'Failed to get server IP addresses',
+        category: ErrorCategory.EASYPANEL_API,
+        operation: 'getServerIPAddress',
+        originalError: error as Error,
+        suggestions: [
+          'Check network connectivity',
+          'Verify permissions for network interface access',
+          'Ensure the server has network interfaces configured',
+        ],
+      });
+    }
+  }
+
+  /**
+   * Get EasyPanel panel domain URL
+   */
+  async getPanelDomain(
+    includeDefaultPort: boolean = false,
+    checkSSL: boolean = true
+  ): Promise<{
+    primaryDomain: string;
+    allDomains: Array<{
+      domain: string;
+      type: 'panel' | 'service' | 'custom';
+      ssl: boolean;
+      sslStatus?: 'valid' | 'expired' | 'invalid' | 'none';
+      expiresAt?: string;
+    }>;
+    panelUrl: string;
+    serverUrl: string;
+    detectedFrom: 'config' | 'interface' | 'ip' | 'fallback';
+  }> {
+    await this.ensureAuthenticated();
+
+    try {
+      // Try to get from EasyPanel's domain configuration
+      let domainInfo: any = null;
+      let detectedFrom: 'config' | 'interface' | 'ip' | 'fallback' = 'fallback';
+
+      try {
+        domainInfo = await this.query('system.getPanelDomain');
+        detectedFrom = 'config';
+      } catch (error) {
+        // If failed, try to detect from network interface
+        const ips = await this.getServerIPAddress(true, false, false);
+        const publicIP = ips.find(ip => ip.type === 'public')?.address;
+
+        if (publicIP) {
+          // Assume panel runs on standard ports
+          domainInfo = {
+            primaryDomain: publicIP,
+            domains: [
+              {
+                domain: publicIP,
+                type: 'panel',
+                ssl: false,
+                sslStatus: 'none',
+              }
+            ]
+          };
+          detectedFrom = 'ip';
+        } else {
+          // Last resort: use localhost
+          domainInfo = {
+            primaryDomain: 'localhost',
+            domains: [
+              {
+                domain: 'localhost',
+                type: 'panel',
+                ssl: false,
+                sslStatus: 'none',
+              }
+            ]
+          };
+          detectedFrom = 'fallback';
+        }
+      }
+
+      // Process domains and check SSL if requested
+      const allDomains = await Promise.all(
+        domainInfo.domains.map(async (domain: any) => {
+          const result = { ...domain };
+
+          if (checkSSL && domain.ssl) {
+            try {
+              const sslInfo = await this.checkSSLCertificate(domain.domain);
+              result.sslStatus = sslInfo.status;
+              result.expiresAt = sslInfo.expiresAt;
+            } catch (error) {
+              result.sslStatus = 'invalid';
+            }
+          } else if (!domain.ssl) {
+            result.sslStatus = 'none';
+          }
+
+          return result;
+        })
+      );
+
+      // Build URLs
+      const protocol = domainInfo.primaryDomain.includes('localhost') || !allDomains.find(d => d.sslStatus === 'valid')
+        ? 'http'
+        : 'https';
+
+      let primaryDomain = domainInfo.primaryDomain;
+      const port = process.env.EASYPANEL_PORT || '3000';
+
+      // Add port if non-standard and requested
+      if (includeDefaultPort || (port !== '80' && port !== '443' && port !== '3000')) {
+        // Add port only if not already in domain
+        if (!primaryDomain.includes(':')) {
+          primaryDomain += `:${port}`;
+        }
+      }
+
+      const panelUrl = `${protocol}://${primaryDomain}`;
+      const serverUrl = this.baseUrl || `${protocol}://${primaryDomain}`;
+
+      return {
+        primaryDomain: domainInfo.primaryDomain,
+        allDomains,
+        panelUrl,
+        serverUrl,
+        detectedFrom,
+      };
+    } catch (error) {
+      throw new EasyPanelError({
+        message: 'Failed to detect panel domain',
+        category: ErrorCategory.EASYPANEL_API,
+        operation: 'getPanelDomain',
+        originalError: error as Error,
+        suggestions: [
+          'Check EasyPanel configuration for domain settings',
+          'Verify DNS resolution for configured domains',
+          'Ensure SSL certificates are properly configured',
+          'Check if EasyPanel is running on expected ports',
+        ],
+      });
+    }
+  }
+
+  /**
+   * Get comprehensive system information
+   */
+  async getSystemInfo(
+    includeDocker: boolean = true,
+    includeNetwork: boolean = true,
+    includeServices: boolean = true
+  ): Promise<{
+    hostname: string;
+    platform: string;
+    arch: string;
+    os: {
+      type: string;
+      release: string;
+      uptime: number;
+      loadAverage: number[];
+    };
+    cpu: {
+      model: string;
+      cores: number;
+      speed: number;
+      usage: {
+        user: number;
+        system: number;
+        idle: number;
+        total: number;
+      };
+    };
+    memory: {
+      total: number;
+      free: number;
+      used: number;
+      cached: number;
+      buffers: number;
+      swap: {
+        total: number;
+        used: number;
+        free: number;
+      };
+    };
+    disk: Array<{
+      mountpoint: string;
+      total: number;
+      used: number;
+      free: number;
+      usagePercent: number;
+      filesystem: string;
+    }>;
+    network?: Array<{
+      interface: string;
+      type: string;
+      speed: number;
+      mtu: number;
+      rx: {
+        bytes: number;
+        packets: number;
+        errors: number;
+      };
+      tx: {
+        bytes: number;
+        packets: number;
+        errors: number;
+      };
+    }>;
+    docker?: {
+      version: string;
+      containers: {
+        total: number;
+        running: number;
+        stopped: number;
+        paused: number;
+      };
+      images: {
+        total: number;
+        size: number;
+      };
+      volumes: {
+        total: number;
+        size: number;
+      };
+      system: {
+        'Docker Root Dir': string;
+        'Index Server Address': string;
+        'Registry Mirrors': string[];
+      };
+    };
+    services?: Array<{
+      name: string;
+      status: 'running' | 'stopped' | 'error';
+      enabled: boolean;
+      uptime?: number;
+      pid?: number;
+      memory?: {
+        rss: number;
+        vms: number;
+      };
+      cpu?: {
+        percent: number;
+      };
+    }>;
+    timestamp: string;
+  }> {
+    await this.ensureAuthenticated();
+
+    try {
+      // Try to get system info from EasyPanel
+      let systemInfo: any = null;
+
+      try {
+        systemInfo = await this.query('system.getSystemInfo', {
+          includeDocker,
+          includeNetwork,
+          includeServices,
+        });
+      } catch (error) {
+        // Fallback to OS module
+        systemInfo = await this.getFallbackSystemInfo(includeDocker, includeServices);
+      }
+
+      // Add timestamp
+      systemInfo.timestamp = new Date().toISOString();
+
+      return systemInfo;
+    } catch (error) {
+      throw new EasyPanelError({
+        message: 'Failed to get system information',
+        category: ErrorCategory.EASYPANEL_API,
+        operation: 'getSystemInfo',
+        originalError: error as Error,
+        suggestions: [
+          'Check if system monitoring tools are installed',
+          'Ensure sufficient permissions to read system metrics',
+          'Verify Docker daemon is running (if Docker info requested)',
+          'Check system resource availability',
+        ],
+      });
+    }
+  }
+
+  /**
+   * Perform comprehensive health check
+   */
+  async performHealthCheck(
+    checks?: Array<'disk' | 'memory' | 'cpu' | 'docker' | 'services' | 'network' | 'ssl'>,
+    verbose: boolean = false,
+    thresholdWarning: number = 80,
+    thresholdCritical: number = 95
+  ): Promise<{
+    overall: 'healthy' | 'warning' | 'critical' | 'error';
+    checks: {
+      disk?: {
+        status: 'healthy' | 'warning' | 'critical';
+        usagePercent: number;
+        thresholds: { warning: number; critical: number };
+        details: any;
+      };
+      memory?: {
+        status: 'healthy' | 'warning' | 'critical';
+        usagePercent: number;
+        thresholds: { warning: number; critical: number };
+        details: any;
+      };
+      cpu?: {
+        status: 'healthy' | 'warning' | 'critical';
+        usagePercent: number;
+        thresholds: { warning: number; critical: number };
+        details: any;
+      };
+      docker?: {
+        status: 'healthy' | 'unhealthy' | 'error';
+        details: any;
+        issues: string[];
+      };
+      services?: {
+        status: 'healthy' | 'warning' | 'critical';
+        services: Array<{
+          name: string;
+          status: 'running' | 'stopped' | 'error';
+          critical: boolean;
+        }>;
+        failedCount: number;
+      };
+      network?: {
+        status: 'healthy' | 'warning' | 'critical';
+        connectivity: {
+          internet: boolean;
+          dns: boolean;
+          docker: boolean;
+        };
+        details: any;
+      };
+      ssl?: {
+        status: 'healthy' | 'warning' | 'critical';
+        certificates: Array<{
+          domain: string;
+          status: 'valid' | 'expired' | 'expiring' | 'invalid';
+          daysToExpiry?: number;
+        }>;
+      };
+    };
+    warnings: string[];
+    criticals: string[];
+    errors: string[];
+    summary: {
+      totalChecks: number;
+      passed: number;
+      warnings: number;
+      critical: number;
+      errors: number;
+    };
+  }> {
+    await this.ensureAuthenticated();
+
+    try {
+      // Default to all checks if not specified
+      const checksToRun = checks || ['disk', 'memory', 'cpu', 'docker', 'services', 'network', 'ssl'];
+      const warningThreshold = Math.min(thresholdWarning, 95);
+      const criticalThreshold = Math.min(Math.max(thresholdWarning, thresholdCritical), 99);
+
+      // Initialize result
+      const healthCheckResult: any = {
+        overall: 'healthy',
+        checks: {},
+        warnings: [],
+        criticals: [],
+        errors: [],
+        summary: {
+          totalChecks: checksToRun.length,
+          passed: 0,
+          warnings: 0,
+          critical: 0,
+          errors: 0,
+        },
+      };
+
+      // Get system info once to use across checks
+      const systemInfo = await this.getSystemInfo(true, true, true);
+
+      // Disk health check
+      if (checksToRun.includes('disk')) {
+        const diskCheck = await this.checkDiskHealth(systemInfo.disk, warningThreshold, criticalThreshold, verbose);
+        healthCheckResult.checks.disk = diskCheck;
+        if (diskCheck.status === 'warning') healthCheckResult.warnings.push('Disk usage high');
+        if (diskCheck.status === 'critical') healthCheckResult.criticals.push('Disk usage critical');
+      }
+
+      // Memory health check
+      if (checksToRun.includes('memory')) {
+        const memoryCheck = await this.checkMemoryHealth(systemInfo.memory, warningThreshold, criticalThreshold, verbose);
+        healthCheckResult.checks.memory = memoryCheck;
+        if (memoryCheck.status === 'warning') healthCheckResult.warnings.push('Memory usage high');
+        if (memoryCheck.status === 'critical') healthCheckResult.criticals.push('Memory usage critical');
+      }
+
+      // CPU health check
+      if (checksToRun.includes('cpu')) {
+        const cpuCheck = await this.checkCpuHealth(systemInfo.cpu, warningThreshold, criticalThreshold, verbose);
+        healthCheckResult.checks.cpu = cpuCheck;
+        if (cpuCheck.status === 'warning') healthCheckResult.warnings.push('CPU usage high');
+        if (cpuCheck.status === 'critical') healthCheckResult.criticals.push('CPU usage critical');
+      }
+
+      // Docker health check
+      if (checksToRun.includes('docker') && systemInfo.docker) {
+        const dockerCheck = await this.checkDockerHealth(systemInfo.docker, verbose);
+        healthCheckResult.checks.docker = dockerCheck;
+        if (dockerCheck.status !== 'healthy') healthCheckResult.errors.push('Docker service issues');
+      }
+
+      // Services health check
+      if (checksToRun.includes('services') && systemInfo.services) {
+        const servicesCheck = await this.checkServicesHealth(systemInfo.services, verbose);
+        healthCheckResult.checks.services = servicesCheck;
+        if (servicesCheck.status === 'warning') healthCheckResult.warnings.push('Some services issues');
+        if (servicesCheck.status === 'critical') healthCheckResult.criticals.push('Critical services failing');
+      }
+
+      // Network health check
+      if (checksToRun.includes('network')) {
+        const networkCheck = await this.checkNetworkHealth(verbose);
+        healthCheckResult.checks.network = networkCheck;
+        if (networkCheck.status === 'warning') healthCheckResult.warnings.push('Network issues detected');
+        if (networkCheck.status === 'critical') healthCheckResult.criticals.push('Network connectivity issues');
+      }
+
+      // SSL certificate check
+      if (checksToRun.includes('ssl')) {
+        const sslCheck = await this.checkSSLHealth(verbose);
+        healthCheckResult.checks.ssl = sslCheck;
+        if (sslCheck.status === 'warning') healthCheckResult.warnings.push('SSL certificates expiring soon');
+        if (sslCheck.status === 'critical') healthCheckResult.criticals.push('SSL certificate issues');
+      }
+
+      // Calculate overall status
+      if (healthCheckResult.errors.length > 0) {
+        healthCheckResult.overall = 'error';
+      } else if (healthCheckResult.criticals.length > 0) {
+        healthCheckResult.overall = 'critical';
+      } else if (healthCheckResult.warnings.length > 0) {
+        healthCheckResult.overall = 'warning';
+      }
+
+      // Update summary
+      healthCheckResult.summary.warnings = healthCheckResult.warnings.length;
+      healthCheckResult.summary.critical = healthCheckResult.criticals.length;
+      healthCheckResult.summary.errors = healthCheckResult.errors.length;
+      healthCheckResult.summary.passed = healthCheckResult.summary.totalChecks -
+        healthCheckResult.summary.warnings -
+        healthCheckResult.summary.critical -
+        healthCheckResult.summary.errors;
+
+      return healthCheckResult;
+    } catch (error) {
+      throw new EasyPanelError({
+        message: 'Failed to perform health check',
+        category: ErrorCategory.EASYPANEL_API,
+        operation: 'performHealthCheck',
+        originalError: error as Error,
+        suggestions: [
+          'Check system monitoring permissions',
+          'Ensure all required services are accessible',
+          'Verify network connectivity for external checks',
+          'Check Docker daemon status (if Docker checks enabled)',
+        ],
+      });
+    }
+  }
+
+  // ==================== HELPER METHODS ====================
+
+  /**
+   * Check if IP address is private
+   */
+  private isPrivateIP(ip: string): boolean {
+    // IPv4 private ranges
+    const ipv4PrivateRanges = [
+      /^10\./,
+      /^172\.(1[6-9]|2\d|3[0-1])\./,
+      /^192\.168\./,
+      /^127\./,
+      /^169\.254\./, // Link-local
+    ];
+
+    // IPv6 private ranges
+    const ipv6PrivateRanges = [
+      /^fc00:/, // Unique local
+      /^fe80:/, // Link-local
+      /^::1/,    // Loopback
+    ];
+
+    if (ip.includes(':')) {
+      // IPv6
+      return ipv6PrivateRanges.some(range => range.test(ip));
+    } else {
+      // IPv4
+      return ipv4PrivateRanges.some(range => range.test(ip));
+    }
+  }
+
+  /**
+   * Check SSL certificate details
+   */
+  private async checkSSLCertificate(domain: string): Promise<{
+    status: 'valid' | 'expired' | 'invalid' | 'none';
+    expiresAt?: string;
+    daysToExpiry?: number;
+  }> {
+    try {
+      // Node.js TLS check
+      const tls = await import('tls');
+
+      return new Promise((resolve) => {
+        const socket = tls.connect(443, domain, { timeout: 5000 }, () => {
+          const cert = socket.getPeerCertificate();
+          socket.destroy();
+
+          if (!cert || Object.keys(cert).length === 0) {
+            resolve({ status: 'none' });
+            return;
+          }
+
+          const now = new Date();
+          const expires = new Date(cert.valid_to);
+          const daysToExpiry = Math.ceil((expires.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+          let status: 'valid' | 'expired' | 'invalid';
+          if (now > expires) {
+            status = 'expired';
+          } else if (daysToExpiry < 7) {
+            status = 'invalid'; // Will expire soon
+          } else {
+            status = 'valid';
+          }
+
+          resolve({
+            status,
+            expiresAt: cert.valid_to,
+            daysToExpiry,
+          });
+        });
+
+        socket.on('error', () => {
+          resolve({ status: 'none' });
+        });
+
+        socket.setTimeout(5000, () => {
+          socket.destroy();
+          resolve({ status: 'invalid' });
+        });
+      });
+    } catch (error) {
+      return { status: 'invalid' };
+    }
+  }
+
+  /**
+   * Get fallback system information using Node.js modules
+   */
+  private async getFallbackSystemInfo(includeDocker: boolean, includeServices: boolean): Promise<any> {
+    const systemInfo: any = {
+      hostname: os.hostname(),
+      platform: os.platform(),
+      arch: os.arch(),
+      os: {
+        type: os.type(),
+        release: os.release(),
+        uptime: os.uptime(),
+        loadAverage: os.loadavg(),
+      },
+      cpu: {
+        model: os.cpus()[0]?.model || 'Unknown',
+        cores: os.cpus().length,
+        speed: os.cpus()[0]?.speed || 0,
+        usage: { user: 0, system: 0, idle: 100, total: 100 },
+      },
+      memory: {
+        total: os.totalmem(),
+        free: os.freemem(),
+        used: os.totalmem() - os.freemem(),
+        cached: 0,
+        buffers: 0,
+        swap: { total: 0, used: 0, free: 0 },
+      },
+      disk: [],
+      network: [], // Would need additional dependencies for full network stats
+    };
+
+    // Add disk info
+    try {
+      const { stdout } = await execAsync('df -h | grep -E "^/dev/"');
+      const lines = stdout.split('\n').filter(line => line);
+
+      systemInfo.disk = lines.map(line => {
+        const parts = line.trim().split(/\s+/);
+        return {
+          mountpoint: parts[5],
+          total: this.parseSize(parts[1]),
+          used: this.parseSize(parts[2]),
+          free: this.parseSize(parts[3]),
+          usagePercent: parseFloat(parts[4]),
+          filesystem: parts[0],
+        };
+      });
+    } catch (error) {
+      // Disk info unavailable
+    }
+
+    // Add Docker info
+    if (includeDocker) {
+      try {
+        const { stdout } = await execAsync('docker version --format "{{.Server.Version}}"');
+        const { stdout: dockerInfo } = await execAsync('docker system df --format "{{.Type}}\t{{.Size}}\t{{.Count}}"');
+
+        systemInfo.docker = {
+          version: stdout.trim(),
+          containers: { total: 0, running: 0, stopped: 0, paused: 0 },
+          images: { total: 0, size: 0 },
+          volumes: { total: 0, size: 0 },
+          system: {
+            'Docker Root Dir': '/var/lib/docker',
+            'Index Server Address': 'https://index.docker.io/v1/',
+            'Registry Mirrors': [],
+          },
+        };
+      } catch (error) {
+        // Docker info unavailable
+      }
+    }
+
+    // Add services info
+    if (includeServices) {
+      try {
+        const services = ['easypanel', 'traefik', 'docker', 'nginx'];
+        systemInfo.services = await Promise.all(
+          services.map(async name => {
+            try {
+              const { stdout } = await execAsync(`systemctl is-active ${name}`);
+              const { stdout: enabled } = await execAsync(`systemctl is-enabled ${name}`);
+
+              return {
+                name,
+                status: stdout.trim() === 'active' ? 'running' : 'stopped',
+                enabled: enabled.trim() === 'enabled',
+              };
+            } catch (error) {
+              return {
+                name,
+                status: 'error' as const,
+                enabled: false,
+              };
+            }
+          })
+        );
+      } catch (error) {
+        // Services info unavailable
+      }
+    }
+
+    return systemInfo;
+  }
+
+  /**
+   * Parse size string (e.g., "10G", "500M") to bytes
+   */
+  private parseSize(sizeStr: string): number {
+    const units: { [key: string]: number } = {
+      'K': 1024,
+      'M': 1024 * 1024,
+      'G': 1024 * 1024 * 1024,
+      'T': 1024 * 1024 * 1024 * 1024,
+    };
+
+    const match = sizeStr.match(/^(\d+)([KMGT]?)$/);
+    if (!match) return 0;
+
+    const [, numStr, unit] = match;
+    const num = parseInt(numStr, 10);
+    return num * (units[unit] || 1);
+  }
+
+  /**
+   * Check disk health
+   */
+  private async checkDiskHealth(
+    disks: any[],
+    warningThreshold: number,
+    criticalThreshold: number,
+    verbose: boolean
+  ): Promise<any> {
+    let overallUsage = 0;
+    let maxUsage = 0;
+    const criticalMounts: string[] = [];
+
+    for (const disk of disks) {
+      overallUsage += disk.usagePercent;
+      maxUsage = Math.max(maxUsage, disk.usagePercent);
+      if (disk.usagePercent >= criticalThreshold) {
+        criticalMounts.push(disk.mountpoint);
+      }
+    }
+
+    const avgUsage = disks.length > 0 ? overallUsage / disks.length : 0;
+
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    if (maxUsage >= criticalThreshold) {
+      status = 'critical';
+    } else if (maxUsage >= warningThreshold) {
+      status = 'warning';
+    }
+
+    return {
+      status,
+      usagePercent: maxUsage,
+      thresholds: { warning: warningThreshold, critical: criticalThreshold },
+      details: verbose ? {
+        disks,
+        average: avgUsage,
+        criticalMounts,
+      } : { maxUsage, criticalMounts: criticalMounts.length },
+    };
+  }
+
+  /**
+   * Check memory health
+   */
+  private async checkMemoryHealth(
+    memory: any,
+    warningThreshold: number,
+    criticalThreshold: number,
+    verbose: boolean
+  ): Promise<any> {
+    const usagePercent = (memory.used / memory.total) * 100;
+
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    if (usagePercent >= criticalThreshold) {
+      status = 'critical';
+    } else if (usagePercent >= warningThreshold) {
+      status = 'warning';
+    }
+
+    return {
+      status,
+      usagePercent: Math.round(usagePercent * 100) / 100,
+      thresholds: { warning: warningThreshold, critical: criticalThreshold },
+      details: verbose ? memory : {
+        total: memory.total,
+        used: memory.used,
+        free: memory.free,
+      },
+    };
+  }
+
+  /**
+   * Check CPU health
+   */
+  private async checkCpuHealth(
+    cpu: any,
+    warningThreshold: number,
+    criticalThreshold: number,
+    verbose: boolean
+  ): Promise<any> {
+    // Simplified CPU usage (would need more sophisticated monitoring)
+    const loadAverage = os.loadavg()[0];
+    const usagePercent = Math.min((loadAverage / cpu.cores) * 100, 100);
+
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    if (usagePercent >= criticalThreshold) {
+      status = 'critical';
+    } else if (usagePercent >= warningThreshold) {
+      status = 'warning';
+    }
+
+    return {
+      status,
+      usagePercent: Math.round(usagePercent * 100) / 100,
+      thresholds: { warning: warningThreshold, critical: criticalThreshold },
+      details: verbose ? {
+        ...cpu,
+        loadAverage: os.loadavg(),
+      } : {
+        cores: cpu.cores,
+        loadAverage: loadAverage,
+      },
+    };
+  }
+
+  /**
+   * Check Docker health
+   */
+  private async checkDockerHealth(docker: any, verbose: boolean): Promise<any> {
+    const issues: string[] = [];
+    let status: 'healthy' | 'unhealthy' | 'error' = 'healthy';
+
+    if (!docker.version) {
+      issues.push('Docker daemon not responding');
+      status = 'error';
+    }
+
+    if (docker.containers && docker.containers.total > 100) {
+      issues.push('High number of containers');
+      if (status === 'healthy') status = 'unhealthy';
+    }
+
+    if (docker.images && docker.images.size > 50 * 1024 * 1024 * 1024) { // 50GB
+      issues.push('Large Docker image cache');
+      if (status === 'healthy') status = 'unhealthy';
+    }
+
+    return {
+      status,
+      details: verbose ? docker : {
+        containerCount: docker.containers?.total || 0,
+        imageCount: docker.images?.total || 0,
+      },
+      issues,
+    };
+  }
+
+  /**
+   * Check services health
+   */
+  private async checkServicesHealth(services: any[], verbose: boolean): Promise<any> {
+    const failedCount = services.filter(s => s.status !== 'running').length;
+    const criticalFailures = services.filter(s => s.status !== 'running' && (s.name === 'easypanel' || s.name === 'docker')).length;
+
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    if (criticalFailures > 0) {
+      status = 'critical';
+    } else if (failedCount > 0) {
+      status = 'warning';
+    }
+
+    return {
+      status,
+      services,
+      failedCount,
+    };
+  }
+
+  /**
+   * Check network health
+   */
+  private async checkNetworkHealth(verbose: boolean): Promise<any> {
+    const checks = {
+      internet: false,
+      dns: false,
+      docker: false,
+    };
+
+    // Check internet connectivity
+    try {
+      await execAsync('curl -s --max-time 3 https://google.com > /dev/null');
+      checks.internet = true;
+    } catch (error) {
+      // No internet
+    }
+
+    // Check DNS resolution
+    try {
+      await new Promise((resolve, reject) => {
+        dns.resolve('google.com', (err) => {
+          if (err) reject(err);
+          else resolve(true);
+        });
+      });
+      checks.dns = true;
+    } catch (error) {
+      // DNS issue
+    }
+
+    // Check Docker network
+    try {
+      const { stdout } = await execAsync('docker network ls --format "{{.Name}}" | head -1');
+      checks.docker = stdout.trim().length > 0;
+    } catch (error) {
+      // Docker network issue
+    }
+
+    const passedChecks = Object.values(checks).filter(Boolean).length;
+    const totalChecks = Object.keys(checks).length;
+
+    let status: 'healthy' | 'warning' | 'critical' = 'healthy';
+    if (passedChecks === 0) {
+      status = 'critical';
+    } else if (passedChecks < totalChecks) {
+      status = 'warning';
+    }
+
+    return {
+      status,
+      connectivity: checks,
+      details: verbose ? {
+        passed: passedChecks,
+        total: totalChecks,
+      } : undefined,
+    };
+  }
+
+  /**
+   * Check SSL certificate health
+   */
+  private async checkSSLHealth(verbose: boolean): Promise<any> {
+    const certs = [];
+    let status: 'healthy' | 'warning' | 'critical' | 'error' = 'healthy';
+
+    try {
+      const domainInfo = await this.getPanelDomain(false, true);
+
+      for (const domain of domainInfo.allDomains) {
+        if (!domain.ssl || domain.type === 'panel') continue;
+
+        const sslInfo = await this.checkSSLCertificate(domain.domain);
+        certs.push({
+          domain: domain.domain,
+          status: sslInfo.status,
+          daysToExpiry: sslInfo.daysToExpiry,
+        });
+
+        if (sslInfo.status === 'expired') {
+          status = 'critical';
+        } else if (sslInfo.status === 'invalid' && (sslInfo.daysToExpiry || 0) < 30 && status !== 'critical') {
+          status = 'warning';
+        }
+      }
+    } catch (error) {
+      // SSL check failed
+      status = 'error';
+    }
+
+    return {
+      status,
+      certificates: certs,
+    };
   }
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "easypanel-mcp",
-  "version": "1.0.1",
-  "description": "MCP Server for EasyPanel - manage projects, services, deployments, and more",
+  "version": "1.0.2",
+  "description": "Multi-client MCP Server for EasyPanel - supports Claude, Cursor, Windsurf, Kiro, and Web IDEs",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -11,7 +11,8 @@
     "dist",
     "src",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "docs"
   ],
   "scripts": {
     "build": "tsc",
@@ -31,17 +32,36 @@
     "easypanel",
     "model-context-protocol",
     "claude",
+    "cursor",
+    "windsurf",
+    "kiro",
+    "ai-ide",
+    "multi-client",
     "hosting",
-    "deployment"
+    "deployment",
+    "server-management",
+    "docker",
+    "containers",
+    "devops",
+    "api",
+    "rest-api",
+    "sse",
+    "stdio",
+    "cross-platform"
   ],
   "author": "",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "axios": "^1.7.0",
+    "commander": "^14.0.2",
+    "cors": "^2.8.5",
+    "express": "^5.2.1",
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
     "@types/node": "^20.0.0",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0"

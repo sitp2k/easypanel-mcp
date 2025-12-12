@@ -1,0 +1,21 @@
+{
+  "mcpServers": {
+    "easypanel": {
+      "command": "easypanel-mcp",
+      "args": ["--client", "windsurf", "--transport", "stdio", "--verbose"],
+      "description": "EasyPanel management with enhanced error reporting for Windsurf",
+      "features": {
+        "enhancedErrors": true,
+        "streaming": true,
+        "autoRetry": true,
+        "detailedLogging": true
+      },
+      "env": {
+        "EASYPANEL_API_URL": "http://your-easypanel-server:8080",
+        "EASYPANEL_API_TOKEN": "your-api-token-here",
+        "MCP_CLIENT": "windsurf",
+        "DEBUG": "true"
+      }
+    }
+  }
+}

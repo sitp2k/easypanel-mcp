@@ -475,6 +475,66 @@ export const serviceTools = {
       required: ['projectName', 'serviceName', 'buildId'],
     },
   },
+
+  service_restart_easypanel: {
+    name: 'service_restart_easypanel',
+    description: 'Restart EasyPanel daemon service',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+
+  service_restart_traefik: {
+    name: 'service_restart_traefik',
+    description: 'Restart Traefik proxy service',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {},
+      required: [],
+    },
+  },
+
+  service_get_status: {
+    name: 'service_get_status',
+    description: 'Check service health status',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        serviceName: {
+          type: 'string',
+          enum: ['easypanel', 'traefik', 'docker', 'nginx'],
+          description: 'Name of the service to check (easypanel, traefik, docker, nginx)',
+        },
+      },
+      required: ['serviceName'],
+    },
+  },
+
+  service_get_logs: {
+    name: 'service_get_logs',
+    description: 'Fetch system service logs',
+    inputSchema: {
+      type: 'object' as const,
+      properties: {
+        serviceName: {
+          type: 'string',
+          enum: ['easypanel', 'traefik', 'docker', 'nginx'],
+          description: 'Name of the service (easypanel, traefik, docker, nginx)',
+        },
+        lines: {
+          type: 'number',
+          description: 'Number of log lines to retrieve (default: 100, max: 1000)',
+        },
+        follow: {
+          type: 'boolean',
+          description: 'Follow log stream in real-time (default: false)',
+        },
+      },
+      required: ['serviceName'],
+    },
+  },
 };
 
 export async function handleServiceTool(name: string, args: unknown) {
@@ -1019,6 +1079,93 @@ ws.onmessage = (event) => {
               duration: (result as any).endTime && (result as any).startTime
                 ? new Date((result as any).endTime).getTime() - new Date((result as any).startTime).getTime()
                 : null,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    case 'service_restart_easypanel': {
+      const schema = z.object({});
+      const params = schema.parse(args);
+
+      const result = await client.restartEasyPanelService();
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: true,
+              message: 'EasyPanel service restarted successfully',
+              result,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    case 'service_restart_traefik': {
+      const schema = z.object({});
+      const params = schema.parse(args);
+
+      const result = await client.restartTraefikService();
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              success: true,
+              message: 'Traefik service restarted successfully',
+              result,
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    case 'service_get_status': {
+      const schema = z.object({
+        serviceName: z.enum(['easypanel', 'traefik', 'docker', 'nginx']),
+      });
+      const params = schema.parse(args);
+
+      const result = await client.getServiceStatus(params.serviceName);
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              service: params.serviceName,
+              status: result,
+              timestamp: new Date().toISOString(),
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    case 'service_get_logs': {
+      const schema = z.object({
+        serviceName: z.enum(['easypanel', 'traefik', 'docker', 'nginx']),
+        lines: z.number().min(1).max(1000).optional(),
+        follow: z.boolean().optional(),
+      });
+      const params = schema.parse(args);
+
+      const result = await client.getSystemServiceLogs(params.serviceName, {
+        lines: params.lines || 100,
+        follow: params.follow || false,
+      });
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: JSON.stringify({
+              service: params.serviceName,
+              logs: result,
+              lines: params.lines || 100,
+              follow: params.follow || false,
+              timestamp: new Date().toISOString(),
             }, null, 2),
           },
         ],
