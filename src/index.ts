@@ -25,7 +25,7 @@ import { databaseTools, handleDatabaseTool } from './tools/databases.js';
 import { domainTools, handleDomainTool } from './tools/domains.js';
 import { licenseTools, handleLicenseTool } from './tools/license.js';
 import { monitoringTools, handleMonitoringTool } from './tools/monitoring.js';
-import { dockerTools, handleDockerCleanupImages, handleDockerPruneBuilderCache, handleDockerCleanupContainers, handleDockerVolumesCleanup, handleDockerSystemPrune, handleDockerCleanupByProject } from './tools/docker.js';
+import { dockerTools, handleDockerCleanupImages, handleDockerPruneBuilderCache } from './tools/docker.js';
 import { systemTools, handleSystemTool } from './tools/system.js';
 
 class EasyPanelMCPServer {
@@ -136,14 +136,6 @@ class EasyPanelMCPServer {
               return await handleDockerCleanupImages(args || {}, sessionId);
             case 'docker_prune_builder_cache':
               return await handleDockerPruneBuilderCache(args || {}, sessionId);
-            case 'docker_cleanup_containers':
-              return await handleDockerCleanupContainers(args || {}, sessionId);
-            case 'docker_volumes_cleanup':
-              return await handleDockerVolumesCleanup(args || {}, sessionId);
-            case 'docker_system_prune':
-              return await handleDockerSystemPrune(args || {}, sessionId);
-            case 'docker_cleanup_by_project':
-              return await handleDockerCleanupByProject(args as any, sessionId);
           }
         }
 

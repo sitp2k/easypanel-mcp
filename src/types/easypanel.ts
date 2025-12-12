@@ -200,10 +200,16 @@ export interface LogOptions {
 }
 
 export interface LogStreamResponse {
-  service: string;
+  service: string | any;
   logs: ContainerLog[];
   hasMore: boolean;
   cursor?: string;
+  websocketUrl?: string;
+  message?: string;
+  totalMatches?: number;
+  query?: string;
+  instructions?: any;
+  error?: string;
 }
 
 export interface LogSearchResult {
